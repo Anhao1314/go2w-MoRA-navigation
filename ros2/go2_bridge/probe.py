@@ -57,7 +57,13 @@ def _require_ros():
         reliability=ReliabilityPolicy.RELIABLE,
         durability=DurabilityPolicy.VOLATILE,
     )
-    return rclpy, qos, Clock, JointState, PoseStamped, String, Twist
+    # TF verification is conditional: tf2_msgs ships with tf2_ros, which the
+    # sim node also degrades on — the receipt records whether it was checked.
+    try:
+        from tf2_msgs.msg import TFMessage
+    except ImportError:
+        TFMessage = None
+    return rclpy, qos, Clock, JointState, PoseStamped, String, Twist, TFMessage
 
 
 def _yaw_from_xyzw(q) -> float:
@@ -74,12 +80,13 @@ def _phase_command(sim_t_s: float) -> tuple[float, float]:
     return (0.0, 0.0)
 
 
-def run_probe(*, duration_s: float = 11.0, out_dir: pathlib.Path | None = None) -> dict[str, object]:
+def run_probe(*, duration_s: float = 14.0, out_dir: pathlib.Path | None = None) -> dict[str, object]:
     _gate_environment()
-    rclpy, qos, Clock, JointState, PoseStamped, String, Twist = _require_ros()
+    rclpy, qos, Clock, JointState, PoseStamped, String, Twist, TFMessage = _require_ros()
 
     core.load_protocol(PROJECT_ROOT)  # fail-closed protocol check
     received: dict[str, list] = {key: [] for key in core.TOPICS}
+    rclpy.init(args=None)
     node = rclpy.create_node("go2_bridge_probe", use_global_arguments=False,
                              enable_rosout=False, start_parameter_services=False)
 
@@ -92,6 +99,8 @@ def run_probe(*, duration_s: float = 11.0, out_dir: pathlib.Path | None = None) 
     node.create_subscription(JointState, core.TOPICS["joint_states"], _factory("joint_states"), qos)
     node.create_subscription(PoseStamped, core.TOPICS["base_pose"], _factory("base_pose"), qos)
     node.create_subscription(String, core.TOPICS["session_info"], _factory("session_info"), qos)
+    if TFMessage is not None:
+        node.create_subscription(TFMessage, core.TOPICS["tf"], _factory("tf"), qos)
     pub_cmd = node.create_publisher(Twist, core.TOPICS["cmd_vel"], qos)
 
     deadline = _time.monotonic() + duration_s
@@ -119,7 +128,7 @@ def run_probe(*, duration_s: float = 11.0, out_dir: pathlib.Path | None = None) 
         node.destroy_node()
         rclpy.shutdown()
 
-    verdict = _verify(received)
+    verdict = _verify(received, tf_verified=TFMessage is not None)
     if out_dir is not None:
         out_dir = pathlib.Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -133,7 +142,7 @@ def run_probe(*, duration_s: float = 11.0, out_dir: pathlib.Path | None = None) 
     return verdict
 
 
-def _verify(received: dict[str, list]) -> dict[str, object]:
+def _verify(received: dict[str, list], *, tf_verified: bool) -> dict[str, object]:
     """Behavioral closed-loop verification; returns the receipt dict."""
     def fail(reason: str) -> dict[str, object]:
         return {"status": "ROS2_ROUNDTRIP_FAILED", "reason": reason,
@@ -200,6 +209,7 @@ def _verify(received: dict[str, list]) -> dict[str, object]:
     return {
         "status": "ROS2_ROUNDTRIP_PASS",
         "topic_counts": counts,
+        "tf_verified": tf_verified,
         "forward_displacement_m": round(displacement, 4),
         "turn_yaw_change_rad": round(dyaw, 4),
         "commands_accepted": max((row.get("commands_accepted", 0) for row in session_payloads), default=0),

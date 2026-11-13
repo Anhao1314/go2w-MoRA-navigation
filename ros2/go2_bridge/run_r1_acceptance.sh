@@ -36,8 +36,12 @@ set +u
 source /opt/ros/jazzy/setup.bash || blocker "ROS_SETUP_FAILED"
 set -u
 
-# sim dependencies (Linux wheels; the fixture actor ships with the repo)
-pip install --quiet "mujoco==3.11.0" "onnxruntime" "numpy>=2.2.6,<3" \
+# sim dependencies (Linux wheels; the fixture actor ships with the repo).
+# Ubuntu 24.04 (noble) notes: PEP 668 externally-managed env + an apt-owned
+# numpy without a RECORD file — hence the two flags below (harmless on CI,
+# where neither applies).
+export PIP_BREAK_SYSTEM_PACKAGES=1
+pip install --quiet --ignore-installed "mujoco==3.11.0" "onnxruntime" "numpy>=2.2.6,<3" "gymnasium" \
   > "$output_dir/pip.log" 2>&1 || blocker "PIP_FAILED"
 export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"
 python3 - <<'PY' > "$output_dir/ros_imports.log" 2>&1 || blocker "ROS_IMPORTS_FAILED"
@@ -51,13 +55,13 @@ print("imports-ok", "tf2_ros" if importlib.util.find_spec("tf2_ros") else "tf2_r
 PY
 
 # behavioral probe first, sim node second (publisher waits for subscribers)
-timeout 60s python3 "$repo_root/ros2/go2_bridge/probe.py" \
-  --duration 11 --out "$output_dir" > "$output_dir/probe_stdout.log" 2>&1 &
+timeout 75s python3 "$repo_root/ros2/go2_bridge/probe.py" \
+  --duration 14 --out "$output_dir" > "$output_dir/probe_stdout.log" 2>&1 &
 probe_pid=$!
 sleep 2
-timeout 45s python3 "$repo_root/ros2/go2_bridge/sim_node.py" \
+timeout 55s python3 "$repo_root/ros2/go2_bridge/sim_node.py" \
   --actor "$repo_root/ros2/go2_bridge/fixtures/s0_flat.onnx" \
-  --steps 650 --out "$output_dir" > "$output_dir/node_stdout.log" 2>&1 &
+  --steps 750 --out "$output_dir" > "$output_dir/node_stdout.log" 2>&1 &
 node_pid=$!
 wait "$node_pid"; node_exit=$?
 wait "$probe_pid"; probe_exit=$?
@@ -73,6 +77,7 @@ assert node["ros2"]["status"] == "PUBLISHED_NOT_SUBSCRIBER_VERIFIED", node
 assert probe["topic_counts"]["clock"] >= 500, probe
 assert probe["topic_counts"]["joint_states"] >= 500, probe
 assert probe["topic_counts"]["base_pose"] >= 500, probe
+assert probe["tf_verified"] is True and probe["topic_counts"]["tf"] >= 100, probe
 assert probe["forward_displacement_m"] > 0.2, probe
 assert probe["turn_yaw_change_rad"] > 0.1, probe
 assert probe["commands_accepted"] > 0, probe

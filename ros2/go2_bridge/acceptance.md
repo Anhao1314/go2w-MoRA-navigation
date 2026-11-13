@@ -14,15 +14,27 @@ attempt; negative attempts are kept as evidence, never deleted).
 | Adapter wiring: node args, QoS, publish allowlist | contract | PASS | `test_ros2_bridge_adapter` (mock ROS doubles) |
 | Closed loop: cmd_vel → gate → env → session_info | contract | PASS | `test_closed_loop_publishes_allowlist_and_applies_commands` (real MuJoCo, mock ROS) |
 | Behavioral verifier PASS/tamper cases | contract | PASS | `TestProbeVerifier` (synthetic traffic) |
-| Real ros:jazzy DDS closed loop | **ROS-R1** | **PENDING_TARGET_ENV** | `run_r1_acceptance.sh` (CI `ros2-live-r1` workflow; local Docker when available) |
+| Real ros:jazzy DDS closed loop | **ROS-R1** | **PASS (2026-11-14, WSL2 G1-RL-Ubuntu, Jazzy)** | `logs/s4/ros_live/attempt_007/` — verdict `ROS2_R1_PASS`, 582 msgs/topic (incl. TF 582), forward 1.238 m, yaw +1.585 rad, 187 commands accepted |
 
-## Environment limitation (recorded, per sibling-repo doctrine)
+## Attempt log (negative attempts retained as evidence)
 
-The development host is Windows; Jazzy has no Windows rclpy tier and Docker
-Desktop availability on this host is unverified at packaging time. The
-acceptance harness and CI gate exist; a real-DDS PASS must come from the
-`ros2-live-r1` workflow (or a local Docker run of the same script). A blocked
-local run is recorded here as `BLOCKED_TARGET_ENV` and never as ROS-R1.
+| Attempt | Outcome | Cause |
+| --- | --- | --- |
+| attempt_001 | `BLOCKED_TARGET_ENV` | Docker daemon not running; WSL2 route adopted instead |
+| attempt_002 | `ROS2_R1_FAILED` (PIP_FAILED) | noble PEP 668 + apt-owned numpy without RECORD — script now uses `--ignore-installed` + `PIP_BREAK_SYSTEM_PACKAGES` |
+| attempt_003 | `ROS2_R1_FAILED` (VALIDATION_FAILED) | probe crashed: missing `rclpy.init()`; sim node crashed: missing `gymnasium` in acceptance deps |
+| attempt_004 | `ROS2_R1_FAILED` (VALIDATION_FAILED) | TF published but unverified (probe lacked subscription); counts 425 < stale 500 threshold |
+| attempt_005 | `ROS2_R1_FAILED` | probe `_verify` referenced out-of-scope `TFMessage` |
+| attempt_006 | `ROS2_R1_FAILED` | same NameError (stale copy); git_commit null in node status (root + /mnt/d dubious ownership — cosmetic) |
+| **attempt_007** | **`ROS2_R1_PASS`** | probe duration 14 s, TF subscribed and verified, thresholds recalibrated (≥500 msgs, TF ≥100) |
+
+## Environment
+
+- ROS 2 Jazzy (`ros-jazzy-ros-base`) installed in WSL2 `G1-RL-Ubuntu`
+  (Ubuntu 24.04.5, Python 3.12.3, TUNA apt/pip mirrors); the same harness
+  runs in the `ros2-live-r1` CI container.
+- CI gate: `test "$(cat verdict.txt)" = "ROS2_R1_PASS"` (artifacts always
+  uploaded, 30-day retention).
 
 ## Probe behavioral contract (what ROS-R1 means here)
 

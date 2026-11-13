@@ -294,7 +294,7 @@ class TestProbeVerifier(unittest.TestCase):
     def test_verifier_passes_consistent_traffic(self):
         from ros2.go2_bridge import probe
 
-        verdict = probe._verify(self._traffic())
+        verdict = probe._verify(self._traffic(), tf_verified=True)
         self.assertEqual(verdict["status"], "ROS2_ROUNDTRIP_PASS", verdict)
         self.assertGreater(verdict["forward_displacement_m"], 0.2)
         self.assertGreater(verdict["turn_yaw_change_rad"], 0.1)
@@ -302,14 +302,14 @@ class TestProbeVerifier(unittest.TestCase):
     def test_verifier_fails_when_turn_does_not_happen(self):
         from ros2.go2_bridge import probe
 
-        verdict = probe._verify(self._traffic(turn_yaw=0.05))
+        verdict = probe._verify(self._traffic(turn_yaw=0.05), tf_verified=True)
         self.assertEqual(verdict["status"], "ROS2_ROUNDTRIP_FAILED")
         self.assertIn("turn", verdict["reason"])
 
     def test_verifier_fails_without_forward_motion(self):
         from ros2.go2_bridge import probe
 
-        verdict = probe._verify(self._traffic(forward_displacement=0.05))
+        verdict = probe._verify(self._traffic(forward_displacement=0.05), tf_verified=True)
         self.assertEqual(verdict["status"], "ROS2_ROUNDTRIP_FAILED")
         self.assertIn("displacement", verdict["reason"])
 
@@ -319,7 +319,7 @@ class TestProbeVerifier(unittest.TestCase):
         traffic = self._traffic()
         first = traffic["joint_states"][0][0]
         first.name = ["wrong"] * 12
-        verdict = probe._verify(traffic)
+        verdict = probe._verify(traffic, tf_verified=True)
         self.assertEqual(verdict["status"], "ROS2_ROUNDTRIP_FAILED")
         self.assertIn("names", verdict["reason"])
 
