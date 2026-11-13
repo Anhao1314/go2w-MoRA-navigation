@@ -25,3 +25,6 @@ logs/
 
 # Hydra run directory from the Isaac Lab launcher
 outputs/
+
+# VLA datasets and outputs (LeRobotDataset v3, videos, training runs)
+data/vla/
