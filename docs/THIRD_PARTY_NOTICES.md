@@ -47,6 +47,51 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+## google-deepmind/mujoco_menagerie (BSD 3-Clause License)
+
+S4 Sim2Sim（`locomotion/sim2sim/`）所需的四足版 Unitree Go2 官方 MuJoCo 模型，
+直接采用上游打包好的 MJCF 与 mesh，未做修改：
+
+- 项目：https://github.com/google-deepmind/mujoco_menagerie
+- 子目录：`unitree_go2/`
+- 上游固定提交：`370c43965323c0944b433b202aac5058b5f907a9`
+- 引入文件：`models/go2/go2.xml`、`models/go2/assets/*.obj`、`models/go2/LICENSE`、`models/go2/UPSTREAM_README.md`
+
+### 适配说明
+
+`go2.xml` 与 `assets/` 上游原样（关节名 `{FL,FR,RL,RR}_{hip,thigh,calf}_joint`
+与 Isaac USD 侧导出 `locomotion/guardrail/go2_model.json` 完全一致）。项目自建
+`models/go2/go2_flat_scene.xml`（平面场景 + 演示相机，仿照 `models/go2w/` 场景
+模式，`<include>` 引入上游模型）；timestep 与执行器契约在运行时代码中设置，不
+修改上游文件。详细对应关系见 [models/go2/README.md](../models/go2/README.md)。
+
+### BSD 3-Clause License
+
+Copyright (c) 2016-2022 HangZhou YuShu TECHNOLOGY CO.,LTD. ("Unitree Robotics")
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of the copyright holder nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 ## Pending license review (no code adopted yet)
 
 ### elijah-waichong-chan/go2-convex-mpc
