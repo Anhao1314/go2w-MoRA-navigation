@@ -366,6 +366,9 @@ class Go2Sim2SimEnv:
         if self._base_contact_force() > CONTACT_FORCE_THRESHOLD_N:
             self._fell = True
             self._episode_over = True
+        elif self.task == "sequence" and self._stage.completed:
+            # Isaac's `sequence_complete` termination ends the episode on success
+            self._episode_over = True
         elif self._step_count >= self.episode_steps:
             self._episode_over = True
 
