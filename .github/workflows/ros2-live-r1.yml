@@ -1,0 +1,43 @@
+name: ROS2 Live R1 (Go2 bridge, real DDS)
+
+on:
+  pull_request:
+    types: [synchronize]
+    branches:
+      - main
+    paths:
+      - .github/workflows/ros2-live-r1.yml
+      - ros2/go2_bridge/**
+      - locomotion/sim2sim/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-ros2-closed-loop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    container:
+      image: ros:jazzy-ros-base-noble
+    env:
+      ROS_DOMAIN_ID: "77"
+      ROS_AUTOMATIC_DISCOVERY_RANGE: LOCALHOST
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Real ROS2 closed-loop acceptance
+        shell: bash
+        run: bash ros2/go2_bridge/run_r1_acceptance.sh "$RUNNER_TEMP/ros2-live-r1"
+      - name: Preserve raw receipts, environment and failure logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ros2-live-r1-${{ github.run_id }}
+          path: ${{ runner.temp }}/ros2-live-r1/
+          retention-days: 30
+          if-no-files-found: error
+      - name: Enforce real communication gate
+        shell: bash
+        run: test "$(cat "$RUNNER_TEMP/ros2-live-r1/verdict.txt")" = "ROS2_R1_PASS"
