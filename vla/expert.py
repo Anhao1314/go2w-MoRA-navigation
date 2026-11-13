@@ -189,36 +189,57 @@ class EndEffectorIK:
     damping rather than by planning.
     """
 
-    def __init__(self, model, data, *, site_name: str, joint_ids, damping: float = 0.01,
+    def __init__(self, model, data, *, joint_ids, site_name: str | None = None,
+                 body_name: str | None = None, damping: float = 0.01,
                  step_scale: float = 1.0, max_iters: int = 100) -> None:
         import mujoco
 
         import numpy as np
 
+        if (site_name is None) == (body_name is None):
+            raise ValueError("exactly one of site_name / body_name is required")
         self._mujoco = mujoco
         self.np = np
         self.model = model
         self.data = data
-        self.site_id = mujoco_site_id(model, site_name)
+        self.frame_kind = "site" if site_name is not None else "body"
+        self.frame_id = mujoco.mj_name2id(
+            model,
+            mujoco.mjtObj.mjOBJ_SITE if site_name is not None else mujoco.mjtObj.mjOBJ_BODY,
+            site_name if site_name is not None else body_name,
+        )
+        if self.frame_id < 0:
+            raise ValueError(f"frame {site_name or body_name!r} not found in model")
         self.joint_ids = tuple(joint_ids)
         self.damping = damping
         self.step_scale = step_scale
         self.max_iters = max_iters
 
+    def _frame_position(self):
+        if self.frame_kind == "site":
+            return self.data.site_xpos[self.frame_id].copy()
+        return self.data.xpos[self.frame_id].copy()
+
+    def _frame_jacobian(self, jacp):
+        mujoco = self._mujoco
+        if self.frame_kind == "site":
+            mujoco.mj_jacSite(self.model, self.data, jacp, None, self.frame_id)
+        else:
+            mujoco.mj_jacBody(self.model, self.data, jacp, None, self.frame_id)
+
     def solve(self, target_pos) -> list[float]:
-        """Iterate DLS until the site is within 2 mm or ``max_iters``."""
+        """Iterate DLS until the frame origin is within 2 mm or ``max_iters``."""
         np = self.np
         mujoco = self._mujoco
         target = np.asarray(target_pos, dtype=float)
-        mujoco.mj_forward(self.model, self.data)
         jacp = np.zeros((3, self.model.nv))
         for _ in range(self.max_iters):
             mujoco.mj_forward(self.model, self.data)
-            current = self.data.site_xpos[self.site_id].copy()
+            current = self._frame_position()
             error = target - current
             if float(np.linalg.norm(error)) <= 2e-3:
                 break
-            mujoco.mj_jacSite(self.model, self.data, jacp, None, self.site_id)
+            self._frame_jacobian(jacp)
             columns = [jacp[:, self.model.jnt_dofadr[j]] for j in self.joint_ids]
             jacobian = np.stack(columns, axis=1)  # 3 x n_joints
             JT = jacobian.T
@@ -229,12 +250,3 @@ class EndEffectorIK:
                 adr = self.model.jnt_qposadr[j]
                 self.data.qpos[adr] += self.step_scale * float(delta[k])
         return [float(self.data.qpos[self.model.jnt_qposadr[j]]) for j in self.joint_ids]
-
-
-def mujoco_site_id(model, site_name: str) -> int:
-    import mujoco
-
-    site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, site_name)
-    if site_id < 0:
-        raise ValueError(f"site {site_name!r} not found in model")
-    return site_id

@@ -187,7 +187,7 @@ class TestIKSmoke(unittest.TestCase):
         target = (0.10, 0.10, 0.05)
         solutions = ik.solve(target)
         mujoco.mj_forward(model, data)
-        reached = data.site_xpos[ik.site_id]
+        reached = data.site_xpos[ik.frame_id]
         error = sum((reached[i] - target[i]) ** 2 for i in range(3)) ** 0.5
         self.assertLess(error, 5e-3)
         self.assertEqual(len(solutions), 3)
