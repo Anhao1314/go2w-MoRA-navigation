@@ -1,0 +1,59 @@
+{
+  "schema": "go2_ros2_bridge_v0.1",
+  "authority": "SIM_ONLY_CLOSED_LOOP_NO_HARDWARE",
+  "description": "Bidirectional ROS2 online bridge for the S4 Go2 legged sim2sim policy: live state out at 50 Hz, /cmd_vel in with clamp + deadman. Simulation ground truth only.",
+  "relationship_to_p1_plan": "Extension of docs/CPP_ROS2_ARCHITECTURE.md's P1 slice for the legged Go2 S4 policy. The Go2W /go2w/ 500 Hz C++ node plan is separate and unimplemented; this bridge makes no claim against it.",
+  "control_hz": 50,
+  "physics_dt": 0.005,
+  "frames": {
+    "world": "mujoco_world",
+    "base": "base",
+    "not_claimed": ["map", "odom", "ENU", "hardware localization"]
+  },
+  "topics": {
+    "clock": "/clock",
+    "joint_states": "/go2/joint_states",
+    "base_pose": "/go2/base_pose",
+    "tf": "/tf",
+    "session_info": "/go2/session_info",
+    "cmd_vel": "/go2/cmd_vel"
+  },
+  "qos": {
+    "history": "KEEP_LAST",
+    "depth": 32,
+    "reliability": "RELIABLE",
+    "durability": "VOLATILE"
+  },
+  "command": {
+    "message": "geometry_msgs/Twist",
+    "vx_range": [-1.0, 1.0],
+    "wz_range": [-1.0, 1.0],
+    "vy": "FORCED_ZERO",
+    "deadman_s": 0.5,
+    "note": "out-of-range commands are clamped, not rejected; stale commands zero the command (deadman)"
+  },
+  "joint_order": [
+    "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint",
+    "FR_hip_joint", "FR_thigh_joint", "FR_calf_joint",
+    "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint",
+    "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint"
+  ],
+  "joint_state_effort": "OMITTED_UNMEASURED",
+  "policy": {
+    "actor": "logs/s4/actors/s0_flat.onnx",
+    "mode": "s0",
+    "weight_change": "FORBIDDEN",
+    "provenance": "actor sha256 recorded in every run_config.json"
+  },
+  "acceptance_levels": {
+    "ROS-R0": "hash-bound core projection + payload construction, verified without ROS 2",
+    "ROS-R1": "real ros:jazzy DDS round trip: independent probe publishes /cmd_vel, receives all topics, verifies command round trip through sim state"
+  },
+  "forbidden": [
+    "motor command publication",
+    "map/odom frame claims",
+    "odometry/EKF claims",
+    "hardware/real-robot claims",
+    "policy weight modification"
+  ]
+}

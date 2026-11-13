@@ -140,15 +140,24 @@ class Go2Sim2SimEnv:
         model_path: pathlib.Path | str | None = None,
         seed: int = 0,
         velocity_command: tuple[float, float] | None = None,
+        episode_steps: int | None = None,
     ) -> None:
         if task not in ("velocity", "sequence"):
             raise ValueError(f"unknown task {task!r}")
         self.task = task
         self.model_path = pathlib.Path(model_path or DEFAULT_MODEL_PATH)
-        self.episode_steps = VELOCITY_EPISODE_STEPS if task == "velocity" else SEQUENCE_EPISODE_STEPS
+        self.episode_steps = (
+            int(episode_steps)
+            if episode_steps is not None
+            else (VELOCITY_EPISODE_STEPS if task == "velocity" else SEQUENCE_EPISODE_STEPS)
+        )
         self.seed = int(seed)
         # fixed velocity command (S4 smoke/standing runs); None -> sampled per seed
         self._fixed_command = velocity_command
+        # live external command (ROS2 bridge); None -> sampled/fixed stream above.
+        # Takes precedence over both, is clamped to the frozen command ranges, and
+        # is consumed by _sample_velocity_command at reset/resample boundaries.
+        self._external_command: tuple[float, float] | None = None
 
         self.model = mujoco.MjModel.from_xml_path(str(self.model_path))
         self.model.opt.timestep = PHYS_DT
@@ -302,7 +311,26 @@ class Go2Sim2SimEnv:
         return total
 
     # --- commands ------------------------------------------------------------
+    def set_external_command(self, vx: float, wz: float) -> None:
+        """Inject a live (vx, wz) command (ROS2 bridge /cmd_vel entry point).
+
+        Clamped to the frozen command ranges and consumed at the next reset or
+        resample boundary — and by the 50 Hz node loop via re-invoking this
+        setter each control step.  ``None``-clearing is not needed: callers
+        pass the zero command for "stop".  With no external command set the
+        env keeps its seeded sampled stream and full determinism.
+        """
+        vx_clamped = max(COMMAND_RANGE_VX[0], min(COMMAND_RANGE_VX[1], float(vx)))
+        wz_clamped = max(COMMAND_RANGE_WZ[0], min(COMMAND_RANGE_WZ[1], float(wz)))
+        self._external_command = (vx_clamped, wz_clamped)
+        # live sources act immediately, not only at resample boundaries
+        self._command[:] = (vx_clamped, 0.0, wz_clamped)
+
     def _sample_velocity_command(self) -> None:
+        if self._external_command is not None:
+            vx, wz = self._external_command
+            self._command[:] = (vx, 0.0, wz)
+            return
         if self._fixed_command is not None:
             self._command[:] = (self._fixed_command[0], 0.0, self._fixed_command[1])
             return

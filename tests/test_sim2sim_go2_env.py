@@ -162,6 +162,36 @@ class TestS4BaselineConfig(unittest.TestCase):
             np.testing.assert_allclose(env.model.geom_solref[gid], (0.005, 1.0))
 
 
+class TestExternalCommandInjection(unittest.TestCase):
+    """ROS2 bridge entry point: live commands override, determinism preserved."""
+
+    def test_external_command_applied_and_clamped(self):
+        env = Go2Sim2SimEnv("velocity", seed=0)
+        env.set_external_command(2.0, -3.0)  # beyond the frozen ±1 ranges
+        command = env.command
+        self.assertEqual(command[0], 1.0)  # vx clamped to +1
+        self.assertEqual(command[1], 0.0)
+        self.assertEqual(command[2], -1.0)  # wz clamped to -1
+        # survives a resample boundary
+        for _ in range(500):
+            env.step(np.zeros(12))
+        self.assertEqual(env.command[0], 1.0)
+        self.assertEqual(env.command[2], -1.0)
+
+    def test_no_external_command_keeps_sampled_stream(self):
+        env = Go2Sim2SimEnv("velocity", seed=3)
+        obs_a = env.reset()
+        obs_b = Go2Sim2SimEnv("velocity", seed=3).reset()
+        np.testing.assert_array_equal(obs_a, obs_b)  # unchanged default behavior
+
+    def test_episode_steps_override(self):
+        env = Go2Sim2SimEnv("velocity", seed=0, episode_steps=37)
+        self.assertEqual(env.episode_steps, 37)
+        for _ in range(37):
+            env.step(np.zeros(12))
+        self.assertTrue(env.over)
+
+
 class TestStandingSmoke(unittest.TestCase):
     """MVP.md §2.2: stand test before any full episode."""
 
