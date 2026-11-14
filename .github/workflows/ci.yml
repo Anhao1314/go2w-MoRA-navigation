@@ -53,21 +53,11 @@ jobs:
       - name: MPC benchmark
         run: ./build/core/go2w_mpc_bench
 
-  cpp-macos:
-    runs-on: macos-14
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - name: Configure
-        run: >
-          cmake -S cpp -B build/core
-          -DCMAKE_BUILD_TYPE=Release
-          -DGO2W_BUILD_TESTS=ON
-          -DGO2W_BUILD_BENCHMARKS=ON
-      - name: Build
-        run: cmake --build build/core -j 4
-      - name: Test
-        run: ctest --test-dir build/core --output-on-failure
+  # cpp-macos removed 2026-11-14: GitHub cannot provision the requested
+  # 'macos-14-arm64-us-default' runner for this account, and the provisioning
+  # failure cancels the ENTIRE run before job-level continue-on-error applies
+  # ("The configuration ... is not supported", run 43566653390). Re-add when
+  # runner capacity allows; the Ubuntu cpp-build-test job remains the gate.
 
   python-binding:
     runs-on: ubuntu-24.04
