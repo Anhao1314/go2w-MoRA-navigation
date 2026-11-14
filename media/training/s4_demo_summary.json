@@ -1,0 +1,17 @@
+{
+  "layered": {
+    "steps": 474,
+    "fell": false,
+    "completed": true,
+    "stage_reached": 4,
+    "frames": 474
+  },
+  "single": {
+    "steps": 52,
+    "fell": true,
+    "completed": false,
+    "stage_reached": 0,
+    "frames": 52
+  },
+  "seed": 0
+}
