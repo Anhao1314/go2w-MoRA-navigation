@@ -119,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
 
     runner_cfg = load_cfg_from_registry(args.task, "rsl_rl_cfg_entry_point")
     runner = OnPolicyRunner(vec_env, runner_cfg.to_dict(), log_dir=None, device="cuda:0")
-    steps_max = int(inner.max_episode_length)
+    steps_max = int(getattr(inner, "max_episode_length"))
 
     results: list[dict[str, Any]] = []
     for iteration, checkpoint in checkpoints:

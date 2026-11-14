@@ -158,6 +158,7 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
 
+    vec_env: Any = None
     for group in groups:
         group_started = time.time()
         # shared env: data buffers may hold inference tensors from earlier
@@ -203,7 +204,8 @@ def main(argv: list[str] | None = None) -> int:
                 flush=True,
             )
 
-    vec_env.close()
+    if vec_env is not None:
+        vec_env.close()
     write_out(partial=False)
     print(f"[gen] wrote {args.out}", flush=True)
 

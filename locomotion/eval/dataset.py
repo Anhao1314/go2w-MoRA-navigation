@@ -26,7 +26,7 @@ import hashlib
 import json
 import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 import numpy as np
 
@@ -153,7 +153,7 @@ class EpisodeRecorder:
             "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
             "file": f"episodes/{path.name}",
         }
-        payload = {**data, "meta": np.asarray(json.dumps(entry, ensure_ascii=False))}
+        payload = cast("dict[str, Any]", {**data, "meta": np.asarray(json.dumps(entry, ensure_ascii=False))})
         np.savez_compressed(path, **payload)
         entry["sha256"] = sha256_file(path)
         entry["bytes"] = path.stat().st_size

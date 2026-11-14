@@ -110,9 +110,9 @@ def render(
         ax.set_xlabel("x [m]", color="#8b93a7", fontsize=8)
         ax.set_ylabel("y [m]", color="#8b93a7", fontsize=8)
         ax.tick_params(colors="#8b93a7", labelsize=7)
-        ax.xaxis.pane.set_facecolor("#141821")
-        ax.yaxis.pane.set_facecolor("#141821")
-        ax.zaxis.pane.set_facecolor("#141821")
+        getattr(ax.xaxis, "pane").set_facecolor("#141821")
+        getattr(ax.yaxis, "pane").set_facecolor("#141821")
+        getattr(ax.zaxis, "pane").set_facecolor("#141821")
         ax.grid(color="#262b36", alpha=0.5)
 
     out.parent.mkdir(parents=True, exist_ok=True)

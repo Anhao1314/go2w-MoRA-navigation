@@ -15,6 +15,7 @@ Usage (WSL): MUJOCO_GL=egl python scripts/vla_smoke.py [--video] [--max-steps N]
 from __future__ import annotations
 
 import argparse
+from typing import Any
 import json
 import pathlib
 import sys
@@ -95,7 +96,8 @@ def main(argv: list[str] | None = None) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     import imageio
 
-    with imageio.get_writer(out, fps=30, codec="libx264", quality=8) as writer:
+    writer: Any = imageio.get_writer(out, fps=30, codec="libx264", quality=8)
+    with writer:
         for frame in video_frames:
             writer.append_data(frame)
     print("      video:", out)
