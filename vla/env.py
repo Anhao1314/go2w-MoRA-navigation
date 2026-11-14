@@ -27,6 +27,7 @@ from __future__ import annotations
 import importlib.util
 import math
 import pathlib
+from typing import Any
 
 TASK_INSTRUCTION = "pick up the cubes and put them in the green box"
 ENV_HUB_PATH = "lerobot/so101-tabletop-mujoco"
@@ -46,11 +47,12 @@ class EnvNotAvailable(RuntimeError):
 def _env_module():
     """Import the EnvHub snapshot's ``env.py`` (official SO101Env + DEFAULTS)."""
     try:
-        from huggingface_hub import hf_hub_download
+        from huggingface_hub import hf_hub_download  # pyright: ignore[reportMissingImports]
     except ImportError as error:
         raise EnvNotAvailable(f"huggingface_hub unavailable: {error}")
     path = hf_hub_download(repo_id=ENV_HUB_PATH, filename="env.py")
     spec = importlib.util.spec_from_file_location("so101_tabletop_env", path)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -66,8 +68,8 @@ def make_so101_raw_env(**overrides):
 def make_so101_env(**overrides):
     """Official EnvHub path (sealed LocalVectorEnv) — for VLA policy rollouts."""
     try:
-        from lerobot.envs.configs import HubEnvConfig
-        from lerobot.envs.factory import make_env
+        from lerobot.envs.configs import HubEnvConfig  # pyright: ignore[reportMissingImports]
+        from lerobot.envs.factory import make_env  # pyright: ignore[reportMissingImports]
     except ImportError as error:
         raise EnvNotAvailable(f"lerobot stack unavailable: {error}")
 
@@ -121,7 +123,7 @@ class SO101TabletopSession:
         self.unwrapped = env.unwrapped
         self._world = None  # built lazily by the env on first reset/render
         self._body_ids: dict[str, int] = {}
-        self._planning_data = None
+        self._planning_data: Any = None
         self._ik = None
         self._contact_calibrated = False
         self._ee_site = "gripperframe"  # official EE frame in the SO-101 MJCF
@@ -132,13 +134,21 @@ class SO101TabletopSession:
     def _ensure_world(self):
         if self._world is None:
             self._world = self.unwrapped._ensure_world()
-            self._planning_data = self._mujoco.MjData(self._world.model)
+            self._planning_data = self._mujoco.MjData(self.world.model)
             self._body_ids = {
                 name: self._body_id(name)
                 for name in (*CUBE_BODIES, BOX_BODY)
             }
             self._calibrate_fingertip_offset()
         return self._world
+
+    @property
+    def world(self) -> Any:
+        """World accessor: lazily builds and narrows away the Optional."""
+        self._ensure_world()
+        world = self._world
+        assert world is not None
+        return world
 
     def _calibrate_fingertip_offset(self) -> None:
         """Exact fingertip offset: transform every gripper/jaw geom's AABB
@@ -153,8 +163,8 @@ class SO101TabletopSession:
 
         import numpy as np
 
-        model = self._world.model
-        data = self._world.data
+        model = self.world.model
+        data = self.world.data
         mujoco.mj_forward(model, data)  # populate geom_xpos/site_xpos (zeros before this)
         site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, self._ee_site)
         if site_id < 0:
@@ -183,7 +193,7 @@ class SO101TabletopSession:
         self._tip_offset_z = float(data.site_xpos[site_id][2]) - lowest
 
     def _body_id(self, name: str) -> int:
-        body_id = self._mujoco.mj_name2id(self._world.model, self._mujoco.mjtObj.mjOBJ_BODY, name)
+        body_id = self._mujoco.mj_name2id(self.world.model, self._mujoco.mjtObj.mjOBJ_BODY, name)
         if body_id < 0:
             raise RuntimeError(f"body {name!r} not found in the SO-101 model")
         return body_id
@@ -194,9 +204,9 @@ class SO101TabletopSession:
         import mujoco
 
         site_id = self._mujoco.mj_name2id(
-            self._world.model, self._mujoco.mjtObj.mjOBJ_SITE, self._ee_site
+            self.world.model, self._mujoco.mjtObj.mjOBJ_SITE, self._ee_site
         )
-        pos = self._world.data.site_xpos[site_id]
+        pos = self.world.data.site_xpos[site_id]
         return (
             float(pos[0]),
             float(pos[1]),
@@ -204,15 +214,16 @@ class SO101TabletopSession:
         )
 
     def _body_pos(self, name: str) -> tuple[float, float, float]:
-        return tuple(float(v) for v in self._world.data.xpos[self._body_ids[name]])
+        pos = self.world.data.xpos[self._body_ids[name]]
+        return (float(pos[0]), float(pos[1]), float(pos[2]))
 
     def _gripper_open(self) -> bool:
         """Opening ratio from the gripper qpos vs its ctrlrange (radians)."""
-        qadr = int(self._world.qadr[5])
-        lo, hi = float(self._world.lo[5]), float(self._world.hi[5])
+        qadr = int(self.world.qadr[5])
+        lo, hi = float(self.world.lo[5]), float(self.world.hi[5])
         if hi <= lo:
             return False
-        ratio = (float(self._world.data.qpos[qadr]) - lo) / (hi - lo)
+        ratio = (float(self.world.data.qpos[qadr]) - lo) / (hi - lo)
         return ratio > 0.5
 
     def _cube_grasped(self, cube_pos, ee_pos, gripper_open: bool) -> bool:
@@ -234,7 +245,7 @@ class SO101TabletopSession:
         return obs, reward, terminated, truncated, info
 
     def cubes_in_box(self) -> int:
-        return int(self._world.cubes_in_box())
+        return int(self.world.cubes_in_box())
 
     def total_cubes(self) -> int:
         return len(CUBE_BODIES)
@@ -248,9 +259,9 @@ class SO101TabletopSession:
         cube = self._body_pos(cube_name)
         box = self._body_pos(BOX_BODY)
         gripper_open = self._gripper_open()
-        qadr = int(self._world.qadr[5])
-        lo, hi = float(self._world.lo[5]), float(self._world.hi[5])
-        ratio = (float(self._world.data.qpos[qadr]) - lo) / (hi - lo) if hi > lo else 0.5
+        qadr = int(self.world.qadr[5])
+        lo, hi = float(self.world.lo[5]), float(self.world.hi[5])
+        ratio = (float(self.world.data.qpos[qadr]) - lo) / (hi - lo) if hi > lo else 0.5
         return ExpertObservation(
             ee_pos=ee,
             cube_pos=cube,
@@ -276,7 +287,7 @@ class SO101TabletopSession:
             from vla.expert import EndEffectorIK
 
             self._ik = EndEffectorIK(
-                self._world.model, self._planning_data,
+                self.world.model, self._planning_data,
                 site_name=self._ee_site,
                 joint_ids=tuple(self._arm_joint_ids()),
             )
@@ -293,7 +304,7 @@ class SO101TabletopSession:
             self._ref_ee = fingertip_target
 
         # shadow data starts from the live state; IK never touches physics
-        self._planning_data.qpos[:] = self._world.data.qpos
+        self._planning_data.qpos[:] = self.world.data.qpos
         target = (
             float(self._ref_ee[0]),
             float(self._ref_ee[1]),
@@ -303,10 +314,10 @@ class SO101TabletopSession:
 
         action = []
         for k in range(ARM_JOINTS):
-            qadr = int(self._world.qadr[k])
+            qadr = int(self.world.qadr[k])
             deg = targets_rad[k] * 180.0 / math.pi
-            lo_deg = math.degrees(float(self._world.lo[k]))
-            hi_deg = math.degrees(float(self._world.hi[k]))
+            lo_deg = math.degrees(float(self.world.lo[k]))
+            hi_deg = math.degrees(float(self.world.hi[k]))
             action.append(max(lo_deg, min(hi_deg, deg)))
         action.append(100.0 if command.gripper_open else 0.0)
         return np.asarray(action, dtype=np.float32)
@@ -314,8 +325,8 @@ class SO101TabletopSession:
     def _arm_joint_ids(self):
         """The first five joints are the arm; the gripper is channel 5."""
         hinge_ids = [
-            j for j in range(self._world.model.njnt)
-            if self._world.model.jnt_type[j] == self._mujoco.mjtJoint.mjJNT_HINGE
+            j for j in range(self.world.model.njnt)
+            if self.world.model.jnt_type[j] == self._mujoco.mjtJoint.mjJNT_HINGE
         ]
         return hinge_ids[:ARM_JOINTS]
 

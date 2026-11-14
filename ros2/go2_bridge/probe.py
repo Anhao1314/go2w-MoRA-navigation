@@ -23,6 +23,7 @@ import math
 import pathlib
 import sys
 import time as _time
+from typing import Any
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -43,12 +44,12 @@ def _gate_environment() -> None:
 
 def _require_ros():
     try:
-        import rclpy
-        from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
-        from geometry_msgs.msg import PoseStamped, Twist
-        from rosgraph_msgs.msg import Clock
-        from sensor_msgs.msg import JointState
-        from std_msgs.msg import String
+        import rclpy  # pyright: ignore[reportMissingImports]
+        from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy  # pyright: ignore[reportMissingImports]
+        from geometry_msgs.msg import PoseStamped, Twist  # pyright: ignore[reportMissingImports]
+        from rosgraph_msgs.msg import Clock  # pyright: ignore[reportMissingImports]
+        from sensor_msgs.msg import JointState  # pyright: ignore[reportMissingImports]
+        from std_msgs.msg import String  # pyright: ignore[reportMissingImports]
     except ImportError as error:
         raise core.BridgeError(f"real ROS 2 rclpy and standard messages are unavailable: {error}")
     qos = QoSProfile(
@@ -60,7 +61,7 @@ def _require_ros():
     # TF verification is conditional: tf2_msgs ships with tf2_ros, which the
     # sim node also degrades on — the receipt records whether it was checked.
     try:
-        from tf2_msgs.msg import TFMessage
+        from tf2_msgs.msg import TFMessage  # pyright: ignore[reportMissingImports]
     except ImportError:
         TFMessage = None
     return rclpy, qos, Clock, JointState, PoseStamped, String, Twist, TFMessage
@@ -80,7 +81,7 @@ def _phase_command(sim_t_s: float) -> tuple[float, float]:
     return (0.0, 0.0)
 
 
-def run_probe(*, duration_s: float = 14.0, out_dir: pathlib.Path | None = None) -> dict[str, object]:
+def run_probe(*, duration_s: float = 14.0, out_dir: pathlib.Path | None = None) -> dict[str, Any]:
     _gate_environment()
     rclpy, qos, Clock, JointState, PoseStamped, String, Twist, TFMessage = _require_ros()
 
@@ -142,7 +143,7 @@ def run_probe(*, duration_s: float = 14.0, out_dir: pathlib.Path | None = None) 
     return verdict
 
 
-def _verify(received: dict[str, list], *, tf_verified: bool) -> dict[str, object]:
+def _verify(received: dict[str, list], *, tf_verified: bool) -> dict[str, Any]:
     """Behavioral closed-loop verification; returns the receipt dict."""
     def fail(reason: str) -> dict[str, object]:
         return {"status": "ROS2_ROUNDTRIP_FAILED", "reason": reason,
@@ -217,7 +218,7 @@ def _verify(received: dict[str, list], *, tf_verified: bool) -> dict[str, object
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "usage").splitlines()[0])
     parser.add_argument("--duration", type=float, default=11.0, help="probe wall-clock seconds")
     parser.add_argument("--out", type=pathlib.Path, default=None, help="receipt output dir")
     args = parser.parse_args(argv)

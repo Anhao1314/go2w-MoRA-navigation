@@ -69,12 +69,12 @@ def _gate_environment() -> None:
 def _require_ros():
     """Lazy ROS import; raises a structured BridgeError when unavailable."""
     try:
-        import rclpy
-        from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
-        from geometry_msgs.msg import PoseStamped, Twist
-        from rosgraph_msgs.msg import Clock
-        from sensor_msgs.msg import JointState
-        from std_msgs.msg import String
+        import rclpy  # pyright: ignore[reportMissingImports]
+        from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy  # pyright: ignore[reportMissingImports]
+        from geometry_msgs.msg import PoseStamped, Twist  # pyright: ignore[reportMissingImports]
+        from rosgraph_msgs.msg import Clock  # pyright: ignore[reportMissingImports]
+        from sensor_msgs.msg import JointState  # pyright: ignore[reportMissingImports]
+        from std_msgs.msg import String  # pyright: ignore[reportMissingImports]
     except ImportError as error:
         raise core.BridgeError(f"real ROS 2 rclpy and standard messages are unavailable: {error}")
     qos = QoSProfile(
@@ -131,7 +131,7 @@ def run_node(
     tf_available = True
     tf_broadcaster = None
     try:
-        from tf2_ros import TransformBroadcaster  # optional; degrade gracefully
+        from tf2_ros import TransformBroadcaster  # pyright: ignore[reportMissingImports]  # optional; degrade gracefully
 
         tf_broadcaster = TransformBroadcaster(node, qos=qos)
     except ImportError:
@@ -140,7 +140,7 @@ def run_node(
 
     env = Go2Sim2SimEnv("velocity", seed=0, episode_steps=10_000_000)
 
-    def on_cmd_vel(message: Twist) -> None:
+    def on_cmd_vel(message) -> None:
         now_ns = _time.monotonic_ns()
         gate.update(message.linear.x, message.angular.z, now_ns)
 
@@ -149,8 +149,7 @@ def run_node(
     def _stamp(message, time_ns: int) -> None:
         message.header.stamp.sec, message.header.stamp.nanosec = divmod(int(time_ns), 1_000_000_000)
 
-    def _publish_sample(sample: core.LiveSample, clock_msg: Clock, joint_msg: JointState,
-                        pose_msg: PoseStamped, session_msg: String, sim_time_ns: int) -> None:
+    def _publish_sample(sample, clock_msg, joint_msg, pose_msg, session_msg, sim_time_ns):
         clock_msg.clock.sec, clock_msg.clock.nanosec = divmod(sim_time_ns, 1_000_000_000)
         pub_clock.publish(clock_msg)
 
@@ -172,7 +171,7 @@ def run_node(
         pub_pose.publish(pose_msg)
 
         if tf_broadcaster is not None:
-            from tf2_ros import TransformStamped  # function-local, like the rest
+            from tf2_ros import TransformStamped  # pyright: ignore[reportMissingImports]
 
             tf = TransformStamped()
             tf.header.stamp.sec, tf.header.stamp.nanosec = divmod(sample.time_ns, 1_000_000_000)
@@ -221,7 +220,7 @@ def run_node(
                 joint_names=core.JOINT_ORDER,
                 joint_position_rad=tuple(float(v) for v in env.data.qpos[env.isaac_qpos_adr]),
                 joint_velocity_rad_s=tuple(float(v) for v in env.data.qvel[env.isaac_dof_adr]),
-                base_position_m=tuple(float(v) for v in env.base_position),
+                base_position_m=(float(env.base_position[0]), float(env.base_position[1]), float(env.base_position[2])),
                 base_quaternion_xyzw=core.quat_wxyz_to_xyzw(env.data.qpos[3:7]),
                 command_applied=(float(env.command[0]), float(env.command[2])),
             )
@@ -268,7 +267,7 @@ def _git_commit() -> str | None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "usage").splitlines()[0])
     parser.add_argument("--actor", type=pathlib.Path,
                         default=PROJECT_ROOT / "logs" / "s4" / "actors" / "s0_flat.onnx")
     parser.add_argument("--steps", type=int, default=3000, help="control steps to run (50 Hz)")

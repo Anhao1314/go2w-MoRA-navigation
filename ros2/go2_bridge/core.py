@@ -26,6 +26,7 @@ import json
 import math
 import pathlib
 from dataclasses import dataclass, field
+from typing import Any
 
 SCHEMA = "go2_ros2_bridge_v0.1"
 FRAME_WORLD = "mujoco_world"
@@ -67,7 +68,7 @@ class BridgeError(RuntimeError):
     """Fail-closed error for protocol/env/dependency violations."""
 
 
-def canonical_json(payload: dict[str, object]) -> str:
+def canonical_json(payload: dict[str, Any]) -> str:
     """Deterministic JSON for String payloads (g1-repo convention)."""
     return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -80,7 +81,7 @@ def sha256_file(path: pathlib.Path) -> str:
     return digest.hexdigest()
 
 
-def load_protocol(repo_root: pathlib.Path) -> dict[str, object]:
+def load_protocol(repo_root: pathlib.Path) -> dict[str, Any]:
     """Load and validate ``ros2/go2_bridge/protocol.json`` (fail-closed)."""
     path = pathlib.Path(repo_root) / "ros2" / "go2_bridge" / "protocol.json"
     protocol = json.loads(path.read_text(encoding="utf-8"))
@@ -153,7 +154,7 @@ class LiveSample:
         if not (len(self.joint_names) == len(self.joint_position_rad) == len(self.joint_velocity_rad_s)):
             raise ValueError("joint name/position/velocity length mismatch")
 
-    def joint_state_payload(self) -> dict[str, object]:
+    def joint_state_payload(self) -> dict[str, Any]:
         return {
             "schema": SCHEMA,
             "kind": "JOINT_STATE",
@@ -168,7 +169,7 @@ class LiveSample:
             "command_applied": list(self.command_applied),
         }
 
-    def pose_payload(self) -> dict[str, object]:
+    def pose_payload(self) -> dict[str, Any]:
         return {
             "schema": SCHEMA,
             "kind": "BASE_POSE",
@@ -181,7 +182,7 @@ class LiveSample:
             "orientation_xyzw": list(self.base_quaternion_xyzw),
         }
 
-    def tf_payload(self) -> dict[str, object]:
+    def tf_payload(self) -> dict[str, Any]:
         return {
             "schema": SCHEMA,
             "kind": "TF",
@@ -206,7 +207,7 @@ class SessionState:
     command_applied: tuple[float, float] = (0.0, 0.0)
     extra: dict[str, object] = field(default_factory=dict)
 
-    def payload(self) -> dict[str, object]:
+    def payload(self) -> dict[str, Any]:
         return {
             "schema": SCHEMA,
             "kind": "SESSION_INFO",

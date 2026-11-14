@@ -28,3 +28,7 @@ outputs/
 
 # VLA datasets and outputs (LeRobotDataset v3, videos, training runs)
 data/vla/
+
+# scratch and extra venvs
+.s4_scratch/
+.venv312/

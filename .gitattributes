@@ -1,0 +1,4 @@
+
+# Generated model constants: keep byte-identical across platforms (sync test reads raw bytes)
+cpp/include/go2w/generated/model_constants.hpp text eol=lf
+rl/go2w_constants.py text eol=lf

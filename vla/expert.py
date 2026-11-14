@@ -210,10 +210,12 @@ class EndEffectorIK:
         self.model = model
         self.data = data
         self.frame_kind = "site" if site_name is not None else "body"
+        frame_name = site_name if site_name is not None else body_name
+        assert frame_name is not None  # exactly one of site/body was provided
         self.frame_id = mujoco.mj_name2id(
             model,
             mujoco.mjtObj.mjOBJ_SITE if site_name is not None else mujoco.mjtObj.mjOBJ_BODY,
-            site_name if site_name is not None else body_name,
+            frame_name,
         )
         if self.frame_id < 0:
             raise ValueError(f"frame {site_name or body_name!r} not found in model")

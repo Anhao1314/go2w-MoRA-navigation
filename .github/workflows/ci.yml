@@ -29,7 +29,7 @@ jobs:
       - name: Type check
         # locomotion/isaac imports Isaac Lab (only present in the repo's
         # .venv311), so CI type-checks the pure-Python parts of the package
-        run: pyright rl scripts mujoco_demos mora locomotion/eval locomotion/baselines locomotion/__init__.py
+        run: pyright rl scripts mujoco_demos mora ros2/go2_bridge vla locomotion/eval locomotion/baselines locomotion/__init__.py
 
   cpp-build-test:
     runs-on: ubuntu-24.04

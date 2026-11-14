@@ -33,9 +33,12 @@
 
 ## Phase-2：Go2 关节级 locomotion（🟢 活跃，代码在 [`locomotion/`](../locomotion/README.md)）
 
-Phase-2 尚在起步，除协议文档外暂无独立设计文档；`locomotion/sim2sim/README.md`
-（S4 设计占位）与 `locomotion/baselines/convex_mpc/README.md`（C1 接入位）在包内。
-后续设计文档在此登记。
+| 文档/区域 | 内容 |
+| --- | --- |
+| [`locomotion/sim2sim/README.md`](../locomotion/sim2sim/README.md) | **S4 Sim2Sim（已实现并双门 PASS）**：零策略改动 Isaac→MuJoCo，ONNX 导出链、冻结种子评测、单因素归因 |
+| [`ros2/go2_bridge/README.md`](../ros2/go2_bridge/README.md) | **ROS2 真 DDS 闭环（ROS-R1 PASS）**：50 Hz 双向桥、独立探针验收、CI 硬门禁 |
+| [`vla/README.md`](../vla/README.md) | **VLA 链（进行中）**：SO-101 环境封装、脚本专家（WIP）、SmolVLA 微调与评测 |
+| [`locomotion/baselines/convex_mpc/README.md`](../locomotion/baselines/convex_mpc/README.md) | C1 凸 MPC 接入位（待许可审查） |
 
 ## Phase-1：Go2W 轮足导航 adapter（🧊 已冻结归档）
 
