@@ -14,6 +14,10 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+
+# CJK glyphs: DejaVu Sans has none — Chinese labels render as tofu boxes
+plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
+plt.rcParams["axes.unicode_minus"] = False
 import numpy as np  # noqa: E402
 
 OUT = pathlib.Path(__file__).resolve().parents[1] / "media" / "training" / "s4_sim2sim_comparison.png"
