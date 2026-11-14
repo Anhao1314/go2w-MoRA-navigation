@@ -41,6 +41,10 @@ set -u
 # numpy without a RECORD file — hence the two flags below (harmless on CI,
 # where neither applies).
 export PIP_BREAK_SYSTEM_PACKAGES=1
+# Jazzy docker images ship without python3-pip (removed from the base image)
+apt-get update -qq > /dev/null 2>&1
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-pip > /dev/null 2>&1 \
+  || blocker "PIP3_INSTALL_FAILED"
 pip3 install --quiet --ignore-installed "mujoco==3.11.0" "onnxruntime" "numpy>=2.2.6,<3" "gymnasium" \
   > "$output_dir/pip.log" 2>&1 || blocker "PIP_FAILED"
 export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"
