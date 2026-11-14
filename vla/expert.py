@@ -46,6 +46,12 @@ class Geometry:
 
 CARRY_PHASES = frozenset({"LIFT", "TRANSPORT_ABOVE_BOX", "DESCEND_TO_BOX"})
 
+# Gripper motor is slower than the arm: closing/opening completes on the
+# MEASURED jaw ratio, not on a fixed dwell (8 steps only moved it 0.92→0.61).
+GRIPPER_CLOSED_RATIO = 0.25
+GRIPPER_OPEN_RATIO = 0.75
+GRIPPER_MAX_STEPS = 90  # fail-safe: advance anyway if the motor never reaches the target
+
 
 class PickPlacePhase(enum.Enum):
     APPROACH_ABOVE_CUBE = "APPROACH_ABOVE_CUBE"
@@ -68,6 +74,7 @@ class ExpertObservation:
     box_pos: tuple[float, float, float]
     gripper_open: bool
     cube_grasped: bool  # from the sim: cube follows the gripper
+    gripper_ratio: float = 0.5  # jaw opening ratio: 1 = fully open, 0 = fully closed
 
 
 @dataclass(frozen=True)
@@ -162,13 +169,13 @@ class PickPlacePhaseMachine:
             if _dist(obs.ee_pos, obs.cube_pos) > self.geo.grasp_tolerance:
                 self.reset()  # drifted while closing: restart the approach
                 return self.update(obs)
-            if self.steps_in_phase >= self.geo.settle_steps:
+            if obs.gripper_ratio <= GRIPPER_CLOSED_RATIO or self.steps_in_phase >= GRIPPER_MAX_STEPS:
                 self._advance()
                 return self.update(obs)
             return ExpertCommand(waypoint, False, self.phase, self.steps_in_phase)
 
         if self.phase is PickPlacePhase.OPEN_GRIPPER:
-            if self.steps_in_phase >= self.geo.settle_steps:
+            if obs.gripper_ratio >= GRIPPER_OPEN_RATIO or self.steps_in_phase >= GRIPPER_MAX_STEPS:
                 self._advance()
                 return self.update(obs)
             return ExpertCommand(waypoint, True, self.phase, self.steps_in_phase)
@@ -220,28 +227,54 @@ class EndEffectorIK:
             return self.data.site_xpos[self.frame_id].copy()
         return self.data.xpos[self.frame_id].copy()
 
-    def _frame_jacobian(self, jacp):
+    def _frame_jacobian(self, jacp, jacr):
         mujoco = self._mujoco
         if self.frame_kind == "site":
-            mujoco.mj_jacSite(self.model, self.data, jacp, None, self.frame_id)
+            mujoco.mj_jacSite(self.model, self.data, jacp, jacr, self.frame_id)
         else:
-            mujoco.mj_jacBody(self.model, self.data, jacp, None, self.frame_id)
+            mujoco.mj_jacBody(self.model, self.data, jacp, jacr, self.frame_id)
 
-    def solve(self, target_pos) -> list[float]:
-        """Iterate DLS until the frame origin is within 2 mm or ``max_iters``."""
+    def solve(self, target_pos, target_z_axis=None) -> list[float]:
+        """Iterate DLS until the frame reaches ``target_pos`` (within 2 mm).
+
+        ``target_z_axis`` (unit vector, optional) adds an orientation constraint:
+        the frame's local z-axis is pulled toward it (e.g. (0, 0, -1) for a
+        top-down grasp).  Position error and axis-alignment error are stacked
+        into one DLS system; with fewer joints than constraints the damping
+        picks the least-squares compromise, which is what we want — position
+        stays prioritized because its error rows come first and orientation
+        error is scaled below 1.
+        """
         np = self.np
         mujoco = self._mujoco
         target = np.asarray(target_pos, dtype=float)
         jacp = np.zeros((3, self.model.nv))
+        jacr = np.zeros((3, self.model.nv))
+        desired = None
+        if target_z_axis is not None:
+            desired = np.asarray(target_z_axis, dtype=float)
+            desired = desired / float(np.linalg.norm(desired))
         for _ in range(self.max_iters):
             mujoco.mj_forward(self.model, self.data)
             current = self._frame_position()
-            error = target - current
-            if float(np.linalg.norm(error)) <= 2e-3:
-                break
-            self._frame_jacobian(jacp)
-            columns = [jacp[:, self.model.jnt_dofadr[j]] for j in self.joint_ids]
-            jacobian = np.stack(columns, axis=1)  # 3 x n_joints
+            error_pos = target - current
+            if desired is None:
+                error = error_pos
+            else:
+                z_cur = self._frame_z_axis()
+                error_axis = np.cross(z_cur, desired) * 0.5  # rotation axis × sin(angle)
+                error = np.concatenate([error_pos, error_axis])
+                if float(np.linalg.norm(error_pos)) <= 2e-3 and float(
+                    np.linalg.norm(error_axis)
+                ) <= 2e-2:
+                    break
+            self._frame_jacobian(jacp, jacr)
+            columns_p = [jacp[:, self.model.jnt_dofadr[j]] for j in self.joint_ids]
+            jacobian = np.stack(columns_p, axis=1)  # 3 x n_joints
+            if desired is not None:
+                columns_r = [jacr[:, self.model.jnt_dofadr[j]] for j in self.joint_ids]
+                rot = np.stack(columns_r, axis=1) * 0.5
+                jacobian = np.vstack([jacobian, rot])
             JT = jacobian.T
             delta = JT @ np.linalg.solve(
                 jacobian @ JT + self.damping * np.eye(jacobian.shape[0]), error
@@ -250,3 +283,8 @@ class EndEffectorIK:
                 adr = self.model.jnt_qposadr[j]
                 self.data.qpos[adr] += self.step_scale * float(delta[k])
         return [float(self.data.qpos[self.model.jnt_qposadr[j]]) for j in self.joint_ids]
+
+    def _frame_z_axis(self):
+        if self.frame_kind == "site":
+            return self.data.site_xmat[self.frame_id].reshape(3, 3)[:, 2].copy()
+        return self.data.xmat[self.frame_id].reshape(3, 3)[:, 2].copy()

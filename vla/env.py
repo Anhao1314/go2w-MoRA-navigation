@@ -35,6 +35,8 @@ CUBE_BODIES: tuple[str, ...] = ("red_cube", "green_cube", "blue_cube", "yellow_c
 BOX_BODY = "box"
 GRIPPER_JOINT = "gripper"  # 6th joint: opening 0-100 in action space
 ARM_JOINTS = 5  # shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll
+STEP_DT_S = 1.0 / 30.0  # the SO-101 env steps at 30 fps (verified in its source)
+CARTESIAN_SPEED_MPS = 0.08  # servo reference speed: smooth tracking, no waypoint teleports
 
 
 class EnvNotAvailable(RuntimeError):
@@ -121,9 +123,11 @@ class SO101TabletopSession:
         self._body_ids: dict[str, int] = {}
         self._planning_data = None
         self._ik = None
+        self._contact_calibrated = False
         self._ee_site = "gripperframe"  # official EE frame in the SO-101 MJCF
         self._tip_offset_z = 0.0  # calibrated: gripperframe → fingertip, world +z
         self._jaw_body_names = ("gripper", "moving_jaw_so101_v1")
+        self._ref_ee = None  # rate-limited Cartesian servo reference (twitch fix)
 
     def _ensure_world(self):
         if self._world is None:
@@ -137,17 +141,21 @@ class SO101TabletopSession:
         return self._world
 
     def _calibrate_fingertip_offset(self) -> None:
-        """Measure how far the jaw tips reach below the ``gripperframe`` origin.
+        """Exact fingertip offset: transform every gripper/jaw geom's AABB
+        corners into world frame and take the lowest z, at the SAME pose as
+        the site reading — the difference is the jaw reach along world z.
 
-        Computed once from the reset-pose geometry: lowest point (world z) over
-        every geom attached to the gripper/jaw bodies, minus the site's z.  The
-        expert then works in FINGERTIP space and the session shifts waypoints
-        down by this offset when converting to frame-space IK targets.
+        (A sphere-approximation of the capsule jaws overestimated the reach by
+        ~2 cm and made the expert press the jaws into the table beside the
+        cube; the corner transform is exact for the compiled convex hulls.)
         """
-        model = self._world.model
-        data = self._world.data
         import mujoco
 
+        import numpy as np
+
+        model = self._world.model
+        data = self._world.data
+        mujoco.mj_forward(model, data)  # populate geom_xpos/site_xpos (zeros before this)
         site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, self._ee_site)
         if site_id < 0:
             raise RuntimeError(f"site {self._ee_site!r} not found in the SO-101 model")
@@ -160,10 +168,16 @@ class SO101TabletopSession:
         for geom in range(model.ngeom):
             if model.geom_bodyid[geom] not in jaw_ids:
                 continue
-            size = model.geom_size[geom]
-            r = max(float(size[0]), float(size[1]), float(size[2]))
-            center_z = float(data.geom_xpos[geom][2])
-            lowest = min(lowest, center_z - r)  # conservative: sphere-approx bottom
+            center = np.asarray(model.geom_aabb[geom, :3], dtype=float)
+            half = np.asarray(model.geom_aabb[geom, 3:], dtype=float)
+            xpos = np.asarray(data.geom_xpos[geom], dtype=float)
+            xmat = np.asarray(data.geom_xmat[geom], dtype=float).reshape(3, 3)
+            for sx in (-1.0, 1.0):
+                for sy in (-1.0, 1.0):
+                    for sz in (-1.0, 1.0):
+                        corner_local = center + half * np.array([sx, sy, sz])
+                        corner_world = xpos + xmat @ corner_local
+                        lowest = min(lowest, float(corner_world[2]))
         if lowest == float("inf"):
             raise RuntimeError("no gripper/jaw geoms found for fingertip calibration")
         self._tip_offset_z = float(data.site_xpos[site_id][2]) - lowest
@@ -234,20 +248,27 @@ class SO101TabletopSession:
         cube = self._body_pos(cube_name)
         box = self._body_pos(BOX_BODY)
         gripper_open = self._gripper_open()
+        qadr = int(self._world.qadr[5])
+        lo, hi = float(self._world.lo[5]), float(self._world.hi[5])
+        ratio = (float(self._world.data.qpos[qadr]) - lo) / (hi - lo) if hi > lo else 0.5
         return ExpertObservation(
             ee_pos=ee,
             cube_pos=cube,
             box_pos=box,
             gripper_open=gripper_open,
             cube_grasped=self._cube_grasped(cube, ee, gripper_open),
+            gripper_ratio=ratio,
         )
 
     def expert_action(self, command):
         """Waypoint + gripper bool → SO-101 action (degrees + 0-100).
 
-        The command waypoint is in FINGERTIP space; the IK target for the
-        ``gripperframe`` origin is the waypoint shifted UP by the calibrated
-        jaw-reach offset.
+        The command waypoint is in FINGERTIP space; a rate-limited Cartesian
+        servo (``_ref_ee``) slides toward it at CARTESIAN_SPEED_MPS so the arm
+        tracks a continuous reference instead of teleporting between the
+        phase machine's discrete waypoints (the twitch fix).  The IK target
+        for the ``gripperframe`` origin is the reference shifted UP by the
+        calibrated jaw-reach offset.
         """
         import numpy as np
 
@@ -259,14 +280,26 @@ class SO101TabletopSession:
                 site_name=self._ee_site,
                 joint_ids=tuple(self._arm_joint_ids()),
             )
+        if self._ref_ee is None:  # start servoing from where the arm actually is
+            self._ref_ee = np.asarray(self._ee_pos_fingertip(), dtype=float)
+
+        fingertip_target = np.asarray(command.target_ee_pos, dtype=float)
+        delta = fingertip_target - self._ref_ee
+        max_step = CARTESIAN_SPEED_MPS * STEP_DT_S
+        dist = float(np.linalg.norm(delta))
+        if dist > max_step:
+            self._ref_ee = self._ref_ee + delta / dist * max_step
+        else:
+            self._ref_ee = fingertip_target
+
         # shadow data starts from the live state; IK never touches physics
         self._planning_data.qpos[:] = self._world.data.qpos
         target = (
-            command.target_ee_pos[0],
-            command.target_ee_pos[1],
-            command.target_ee_pos[2] + self._tip_offset_z,
+            float(self._ref_ee[0]),
+            float(self._ref_ee[1]),
+            float(self._ref_ee[2]) + self._tip_offset_z,
         )
-        targets_rad = self._ik.solve(target)
+        targets_rad = self._ik.solve(target, target_z_axis=(0.0, 0.0, 1.0))
 
         action = []
         for k in range(ARM_JOINTS):

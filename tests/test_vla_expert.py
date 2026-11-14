@@ -40,6 +40,10 @@ class TestPhaseLadder(unittest.TestCase):
         # the sim registers the grasp once the gripper closes on the cube
         if self.machine.phase is PickPlacePhase.LIFT and not self.grasped:
             self.grasped = True  # contact registers right after CLOSE dwell
+        # jaw ratio model: fully open on approach, closing during CLOSE_GRIPPER
+        ratio = 0.1 if self.machine.phase in (PickPlacePhase.CLOSE_GRIPPER, PickPlacePhase.LIFT,
+                                              PickPlacePhase.TRANSPORT_ABOVE_BOX,
+                                              PickPlacePhase.DESCEND_TO_BOX) else 0.9
         command = self.machine.update(
             ExpertObservation(
                 ee_pos=self.ee,
@@ -47,6 +51,7 @@ class TestPhaseLadder(unittest.TestCase):
                 box_pos=BOX,
                 gripper_open=gripper_open,
                 cube_grasped=self.grasped,
+                gripper_ratio=ratio,
             )
         )
         # perfect executor: teleport the EE to the commanded waypoint
