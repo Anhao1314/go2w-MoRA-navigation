@@ -75,6 +75,10 @@ add_library(go2w_core STATIC
   src/mpc.cpp
   src/controller.cpp
 )
+# The pybind11 shared object (python-binding CI job) links this static
+# library: without PIC the shared-object link fails with R_X86_64_PC32
+# relocation errors against the generated-constants symbols.
+set_property(TARGET go2w_core PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(go2w_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

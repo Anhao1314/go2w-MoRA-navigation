@@ -10,3 +10,4 @@ torch>=2.0
 tensorboard>=2.18
 psutil>=7.0
 matplotlib>=3.8,<4
+onnxruntime>=1.20  # S4 sim2sim: exported-policy inference (locomotion/sim2sim, ros2/go2_bridge)

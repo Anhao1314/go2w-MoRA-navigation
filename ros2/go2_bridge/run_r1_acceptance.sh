@@ -41,7 +41,7 @@ set -u
 # numpy without a RECORD file — hence the two flags below (harmless on CI,
 # where neither applies).
 export PIP_BREAK_SYSTEM_PACKAGES=1
-pip install --quiet --ignore-installed "mujoco==3.11.0" "onnxruntime" "numpy>=2.2.6,<3" "gymnasium" \
+pip3 install --quiet --ignore-installed "mujoco==3.11.0" "onnxruntime" "numpy>=2.2.6,<3" "gymnasium" \
   > "$output_dir/pip.log" 2>&1 || blocker "PIP_FAILED"
 export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"
 python3 - <<'PY' > "$output_dir/ros_imports.log" 2>&1 || blocker "ROS_IMPORTS_FAILED"
