@@ -19,6 +19,7 @@ import argparse
 import json
 import pathlib
 import sys
+from typing import Any
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
