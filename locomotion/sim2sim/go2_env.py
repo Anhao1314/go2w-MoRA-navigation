@@ -141,6 +141,11 @@ class Go2Sim2SimEnv:
         seed: int = 0,
         velocity_command: tuple[float, float] | None = None,
         episode_steps: int | None = None,
+        push_force_n: float = 0.0,
+        push_start_s: float = 5.0,
+        push_duration_s: float = 0.5,
+        payload_kg: float = 0.0,
+        sequence_geometry: tuple[float, float] | None = None,
     ) -> None:
         if task not in ("velocity", "sequence"):
             raise ValueError(f"unknown task {task!r}")
@@ -158,6 +163,12 @@ class Go2Sim2SimEnv:
         # Takes precedence over both, is clamped to the frozen command ranges, and
         # is consumed by _sample_velocity_command at reset/resample boundaries.
         self._external_command: tuple[float, float] | None = None
+        # S2 disturbance protocol (protocol §4: 100 N / 0.5 s lateral push;
+        # payload variation ±3 kg). Zero defaults = no disturbance.
+        self.push_force_n = float(push_force_n)
+        self.push_start_step = int(push_start_s / STEP_DT)
+        self.push_steps = max(1, int(round(push_duration_s / STEP_DT)))
+        self.payload_kg = float(payload_kg)
 
         self.model = mujoco.MjModel.from_xml_path(str(self.model_path))
         self.model.opt.timestep = PHYS_DT
@@ -192,8 +203,21 @@ class Go2Sim2SimEnv:
             [mj_act_ids[name] for name in ISAAC_JOINT_NAMES], dtype=int
         )
         self._apply_s4_baseline_config()
+        if self.payload_kg != 0.0:
+            # ±3 kg base payload (protocol S2): mass + proportional inertia.
+            # MuJoCo reads body_mass/body_inertia directly per step — no
+            # setConst required for these fields.
+            base_mass = float(self.model.body_mass[self._base_body_id])
+            scale = (base_mass + self.payload_kg) / base_mass
+            self.model.body_mass[self._base_body_id] = base_mass + self.payload_kg
+            self.model.body_inertia[self._base_body_id] *= scale
+            self._base_payload_added = self.payload_kg
 
-        self._stage = SequenceStageMachine()
+        geometry = (
+            {"forward_distance_m": sequence_geometry[0], "turn_radians": sequence_geometry[1]}
+            if sequence_geometry is not None else {}
+        )
+        self._stage = SequenceStageMachine(**geometry)
         self._rng = np.random.default_rng(self.seed)
         self._step_count = 0
         self._last_action = np.zeros(NUM_JOINTS)
@@ -377,6 +401,16 @@ class Go2Sim2SimEnv:
         if raw_action.shape != (NUM_JOINTS,):
             raise ValueError(f"expected action shape ({NUM_JOINTS},), got {raw_action.shape}")
         self._last_action = raw_action.copy()
+        # S2 lateral push (protocol §4): world-frame force on the base during
+        # the window; direction = perpendicular to the CURRENT heading
+        if (self.push_force_n != 0.0
+                and self.push_start_step <= self._step_count
+                < self.push_start_step + self.push_steps):
+            heading = self._heading()
+            lateral = np.array([-math.sin(heading), math.cos(heading), 0.0])
+            self.data.xfrc_applied[self._base_body_id, :3] = lateral * self.push_force_n
+        elif self.push_force_n != 0.0:
+            self.data.xfrc_applied[self._base_body_id] = 0.0
         self._apply_action(raw_action)
         self._step_count += 1
 

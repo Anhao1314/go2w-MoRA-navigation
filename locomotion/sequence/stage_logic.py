@@ -54,7 +54,16 @@ class StageUpdate:
 class SequenceStageMachine:
     """Per-episode stage state; update() once per control step (50 Hz)."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        forward_distance_m: float = FORWARD_DISTANCE_M,
+        turn_radians: float = TURN_RADIANS,
+    ) -> None:
+        # geometry overrides for the unseen-task generalization eval (P4);
+        # defaults are the frozen L3 training geometry
+        self._forward_distance_m = float(forward_distance_m)
+        self._turn_radians = float(turn_radians)
         self._stage = 0
         self._start_x = 0.0
         self._start_y = 0.0
@@ -86,12 +95,12 @@ class SequenceStageMachine:
     def _targets(self) -> tuple[tuple[float, float], tuple[float, float]]:
         """(P1, P2) in world coordinates, anchored on the initial heading."""
         forward1 = (math.cos(self._heading0), math.sin(self._heading0))
-        forward2 = (math.cos(self._heading0 + TURN_RADIANS), math.sin(self._heading0 + TURN_RADIANS))
+        forward2 = (math.cos(self._heading0 + self._turn_radians), math.sin(self._heading0 + self._turn_radians))
         p1 = (
-            self._start_x + FORWARD_DISTANCE_M * forward1[0],
-            self._start_y + FORWARD_DISTANCE_M * forward1[1],
+            self._start_x + self._forward_distance_m * forward1[0],
+            self._start_y + self._forward_distance_m * forward1[1],
         )
-        p2 = (p1[0] + FORWARD_DISTANCE_M * forward2[0], p1[1] + FORWARD_DISTANCE_M * forward2[1])
+        p2 = (p1[0] + self._forward_distance_m * forward2[0], p1[1] + self._forward_distance_m * forward2[1])
         return p1, p2
 
     def targets(self) -> tuple[tuple[float, float], tuple[float, float]]:
@@ -100,7 +109,7 @@ class SequenceStageMachine:
         return self._targets()
 
     def _heading_error(self, heading: float) -> float:
-        return wrap(self._heading0 + TURN_RADIANS - heading)
+        return wrap(self._heading0 + self._turn_radians - heading)
 
     def _command(self, pos_x: float, pos_y: float, heading: float) -> tuple[float, float]:
         """``mdp.stage_command`` for a single env: closed-loop (vx, wz)."""

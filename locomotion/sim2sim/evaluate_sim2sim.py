@@ -30,7 +30,7 @@ from typing import Any
 
 import numpy as np
 
-from ..eval.metrics import fall_rate, success_rate, vx_rmse, wz_rmse
+from ..eval.metrics import fall_rate, recovery_time, success_rate, vx_rmse, wz_rmse
 from ..eval.seeds import EVAL_SEEDS
 from .go2_env import Go2Sim2SimEnv, Sim2SimPolicy
 
@@ -211,6 +211,162 @@ def run_sequence_episode(
         "target_p2": [float(p2[0]), float(p2[1])],
         "within_target": within_target,
     }
+
+
+
+
+# --- ② S2 disturbance robustness (protocol amendment: MuJoCo transfer engine) ---
+def run_disturbance_episode(
+    env: Go2Sim2SimEnv, policy: Sim2SimPolicy
+) -> dict[str, Any]:
+    """Velocity episode with the frozen S2 push protocol (100 N / 0.5 s at 5 s)."""
+    obs = env.reset()
+    time_s, cmd_vx, meas_vx = [], [], []
+    while not env.over:
+        command = env.command
+        time_s.append(env.step_count * 0.02)
+        cmd_vx.append(float(command[0]))
+        meas_vx.append(float(obs[0]))
+        env.step(policy.act(obs))
+        obs = env.observation()
+    t = np.asarray(time_s, dtype=float)
+    return {
+        "seed": env.seed,
+        "steps": env.step_count,
+        "fall": bool(env.fell),
+        "time_s": t,
+        "commanded_vx": np.asarray(cmd_vx, dtype=float),
+        "measured_vx": np.asarray(meas_vx, dtype=float),
+    }
+
+
+def evaluate_disturbance(
+    policy: Sim2SimPolicy,
+    *,
+    seeds: tuple[int, ...] = EVAL_SEEDS,
+    checkpoint_label: str,
+    push_force_n: float = 100.0,
+) -> dict[str, Any]:
+    """S2 disturbance robustness: no-fall rate vs the frozen >= 0.90 gate.
+
+    Recovery time uses the shared metrics implementation (single source).
+    """
+    episodes: list[dict[str, Any]] = []
+    for seed in seeds:
+        env = Go2Sim2SimEnv(
+            "velocity", seed=int(seed),
+            push_force_n=push_force_n, push_start_s=5.0, push_duration_s=0.5,
+        )
+        episodes.append(run_disturbance_episode(env, policy))
+
+    no_fall = [not bool(row["fall"]) for row in episodes]
+    recovery = []
+    for row in episodes:
+        rt = recovery_time(
+            row["time_s"], row["commanded_vx"], row["measured_vx"],
+            disturbance_start_s=5.0,
+        )
+        recovery.append(rt)
+    finite = [float(v) for v in recovery if v is not None]
+
+    summary = {
+        "episodes": len(episodes),
+        "seeds": [int(s) for s in seeds],
+        "no_fall_rate": float(np.mean(no_fall)),
+        "gate_no_fall_min": 0.90,
+        "gate_pass": bool(np.mean(no_fall) >= 0.90),
+        "recovery_time_mean_s": float(np.mean(finite)) if finite else None,
+        "recovery_time_max_s": float(np.max(finite)) if finite else None,
+        "recovery_never_count": sum(1 for v in recovery if v is None),
+        "fall_rate": fall_rate([bool(row["fall"]) for row in episodes]),
+        "checkpoint": checkpoint_label,
+        "task": "S2-disturbance-velocity",
+        "method": "mujoco",
+        "push": {"force_n": push_force_n, "duration_s": 0.5, "start_s": 5.0},
+        "engine": "mujoco_transfer_engine",
+    }
+    episode_rows = []
+    for row in episodes:
+        rt = recovery_time(
+            row["time_s"], row["commanded_vx"], row["measured_vx"],
+            disturbance_start_s=5.0,
+        )
+        episode_rows.append({
+            "seed": row["seed"],
+            "steps": row["steps"],
+            "fall": row["fall"],
+            "recovery_time_s": rt,
+        })
+    return {"summary": summary, "episodes": episode_rows}
+
+
+# --- ③ unseen-task generalization (P4) ---
+def run_generalization_episode(
+    env: Go2Sim2SimEnv, policy: Sim2SimPolicy
+) -> dict[str, Any]:
+    obs = env.reset()
+    max_stage = 0
+    while not env.over:
+        env.step(policy.act(obs))
+        obs = env.observation()
+        max_stage = max(max_stage, env.stage)
+        if env.over:
+            break
+    return {
+        "seed": env.seed,
+        "steps": env.step_count,
+        "success": bool(env.completed),
+        "fall": bool(env.fell),
+        "max_stage": int(max_stage),
+    }
+
+
+def evaluate_generalization(
+    policy: Sim2SimPolicy,
+    *,
+    group_label: str,
+    checkpoint_label: str,
+    geometries: dict[str, tuple[float, float]],
+    seeds: tuple[int, ...] = EVAL_SEEDS,
+) -> dict[str, Any]:
+    """Unseen-geometry sequence evaluation: success per variant, layered vs single."""
+    per_variant: dict[str, list[dict[str, Any]]] = {}
+    for variant_name, geometry in geometries.items():
+        rows = []
+        for seed in seeds:
+            env = Go2Sim2SimEnv(
+                "sequence", seed=int(seed), sequence_geometry=geometry,
+            )
+            rows.append(run_generalization_episode(env, policy))
+        per_variant[variant_name] = rows
+
+    variant_summary = {}
+    all_rows = []
+    for variant_name, rows in per_variant.items():
+        successes = sum(1 for r in rows if r["success"])
+        falls = sum(1 for r in rows if r["fall"])
+        finished = [int(r["steps"]) for r in rows if r["success"]]
+        variant_summary[variant_name] = {
+            "success_rate": successes / len(rows),
+            "fall_rate": falls / len(rows),
+            "mean_steps_to_finish": float(np.mean(finished)) if finished else None,
+        }
+        for r in rows:
+            all_rows.append({"variant": variant_name, **r})
+
+    total = sum(len(rows) for rows in per_variant.values())
+    total_success = sum(sum(1 for r in rows if r["success"]) for rows in per_variant.values())
+    summary = {
+        "episodes_total": total,
+        "success_rate_overall": total_success / max(1, total),
+        "per_variant": variant_summary,
+        "checkpoint": checkpoint_label,
+        "task": "Go2Loco-Sequence-unseen-geometry",
+        "method": "mujoco",
+        "group": group_label,
+        "engine": "mujoco_transfer_engine",
+    }
+    return {"summary": summary, "episodes": all_rows}
 
 
 def evaluate_sequence_group(
