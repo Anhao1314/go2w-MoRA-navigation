@@ -72,7 +72,7 @@ S0 locomotion 策略（PPO，冻结复用）──┘
 
 **结论**：分层 vs 端到端的成败差异**跨物理引擎成立**；量化差距（vx +35%、转向 -62%）与单因素归因（被动关节参数、扭转摩擦敏感性）已记录于 [S4 文档](locomotion/sim2sim/README.md)。实现细节：[导出链](scripts/export_s4_policy.py) · [评测器](scripts/eval_s4_sim2sim.py)。
 
-![S4 Sim2Sim 对比](media/training/s4_sim2sim_comparison.png)
+![S4 Sim2Sim 对比](media/training/s4_sim2sim_results.png)
 
 ## ROS2 在线桥：真 DDS 闭环（ROS-R1 级）
 
