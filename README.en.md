@@ -28,12 +28,6 @@
 | --- | --- | --- |
 | Success rate | 100% (converged at 150 iters) | 100% (**50 iters**) |
 
-### L1 (easy): forward 1.2 m -> stop 0.5 s
-
-| Metric | Single layer | Layered |
-| --- | --- | --- |
-| Success rate | 100% (converged at 150 iters) | 100% (**50 iters**) |
-
 **What the ladder means**: on the easy task the hierarchy is merely *faster* (an efficiency win); once the task requires switching locomotion modes, it becomes *possible vs impossible* — and the single-layer failure is precisely localized to the walk-to-turn switch by stage reach rates, a diagnostic only the layered structure provides.
 
 **Sample videos**: [layered completing all four stages](media/training/robot_motion_l3_layered.mp4) · [single layer falling at the turn](media/training/robot_motion_l3_single_fail.mp4) · [sample-efficiency curves](media/training/sweep_ab_comparison.png)
