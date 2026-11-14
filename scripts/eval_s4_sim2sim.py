@@ -40,7 +40,7 @@ ACTOR_DIR = PROJECT_ROOT / "logs" / "s4" / "actors"
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "usage").splitlines()[0])
     parser.add_argument("--task", choices=["velocity", "sequence"], required=True)
     parser.add_argument("--policy", choices=["s0", "single", "layered"], required=True,
                         help="s0: 48-dim velocity policy; single: 53->12; layered: S1+S0 chain")

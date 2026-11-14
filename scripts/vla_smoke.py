@@ -25,7 +25,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "usage").splitlines()[0])
     parser.add_argument("--video", action="store_true", help="record an MP4 of the episode")
     parser.add_argument("--max-steps", type=int, default=3600)
     parser.add_argument("--out", type=pathlib.Path, default=PROJECT_ROOT / "logs" / "vla")
@@ -61,21 +61,22 @@ def main(argv: list[str] | None = None) -> int:
 
     machines = {cube: PickPlacePhaseMachine() for cube in CUBE_BODIES}
     queue = list(CUBE_BODIES)
-    current = queue[0]
+    current: str = queue.pop(0)
     video_frames = []
     phase_log = []
     steps = 0
     obs = session.reset(seed=0)
-    while steps < args.max_steps and queue:
+    while steps < args.max_steps and current:
         machine = machines[current]
         command = machine.update(session.expert_observation(obs, current))
         if command.done:
             placed = session.cubes_in_box()
             print(f"      {current}: DONE (cubes in box: {placed}/{session.total_cubes()}) at step {steps}")
-            queue.pop(0)
-            current = queue[0] if queue else None
-            if current:
+            if queue:
+                current = queue.pop(0)
                 machines[current].reset()
+            else:
+                current = ""
             continue
         action = session.expert_action(command)
         obs, reward, terminated, truncated, info = session.step(action)

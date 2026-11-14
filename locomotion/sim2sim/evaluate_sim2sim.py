@@ -26,6 +26,7 @@ import json
 import pathlib
 import subprocess
 import time as _time
+from typing import Any
 
 import numpy as np
 
@@ -37,7 +38,7 @@ EVIDENCE_SCHEMA_VERSION = "locomotion-run-evidence-v1"
 SEQUENCE_TARGET_TOLERANCE_M = 0.5  # frozen S4 terminal-position window
 
 
-def _git_info(root: pathlib.Path) -> dict[str, object]:
+def _git_info(root: pathlib.Path) -> dict[str, Any]:
     try:
         commit = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "HEAD"],
@@ -101,7 +102,7 @@ def _heading(env: Go2Sim2SimEnv) -> float:
 # --- velocity task -----------------------------------------------------------
 def run_velocity_episode(
     env: Go2Sim2SimEnv, policy: Sim2SimPolicy
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """One frozen-seed episode; arrays are fed into the shared metrics later."""
     obs = env.reset()
     time_s, cmd_vx, cmd_wz, meas_vx, meas_wz = [], [], [], [], []
@@ -132,10 +133,10 @@ def evaluate_velocity(
     *,
     seeds: tuple[int, ...] = EVAL_SEEDS,
     checkpoint_label: str,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Velocity-task summary mirroring ``eval_policy.py``'s JSON schema."""
     started = _time.time()
-    episodes: list[dict[str, object]] = []
+    episodes: list[dict[str, Any]] = []
     for seed in seeds:
         env = Go2Sim2SimEnv("velocity", seed=int(seed))
         result = run_velocity_episode(env, policy)
@@ -188,7 +189,7 @@ def evaluate_velocity(
 # --- sequence task -----------------------------------------------------------
 def run_sequence_episode(
     env: Go2Sim2SimEnv, policy: Sim2SimPolicy
-) -> dict[str, object]:
+) -> dict[str, Any]:
     obs = env.reset()
     max_stage = 0
     while not env.over:
@@ -218,7 +219,7 @@ def evaluate_sequence_group(
     group_label: str,
     checkpoint_label: str,
     seeds: tuple[int, ...] = EVAL_SEEDS,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Sequence-task summary; success uses the shared ``success_rate``."""
     started = _time.time()
     episodes = []

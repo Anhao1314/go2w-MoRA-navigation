@@ -32,24 +32,25 @@ def main() -> int:
 
     machines = {cube: PickPlacePhaseMachine() for cube in CUBE_BODIES}
     queue = list(CUBE_BODIES)
-    current = queue[0]
+    current: str = queue.pop(0)
 
     fps = 30.0
     with mujoco.viewer.launch_passive(world.model, world.data) as viewer:
         obs = session.reset(seed=0)
         next_tick = time.time()
-        placed_log = []
-        while viewer.is_running() and queue:
+        placed_log: list[tuple[str, int]] = []
+        while viewer.is_running() and current:
             machine = machines[current]
             command = machine.update(session.expert_observation(obs, current))
             if command.done:
                 placed = session.cubes_in_box()
                 placed_log.append((current, placed))
                 print(f"[live] {current}: done — cubes in box: {placed}/4")
-                queue.pop(0)
-                current = queue[0] if queue else None
-                if current:
+                if queue:
+                    current = queue.pop(0)
                     machines[current].reset()
+                else:
+                    current = ""
                 continue
             action = session.expert_action(command)
             obs, reward, terminated, truncated, info = env.step(action)

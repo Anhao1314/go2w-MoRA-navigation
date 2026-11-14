@@ -36,7 +36,7 @@ from locomotion.sim2sim.policy_export import SUPPORTED_PRESETS, export_actor_onn
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "usage").splitlines()[0])
     parser.add_argument("--preset", choices=sorted(SUPPORTED_PRESETS), required=True,
                         help="which S4 actor to export (pins obs/action dims)")
     parser.add_argument("--checkpoint", required=True, type=pathlib.Path,
