@@ -142,7 +142,8 @@ def main(argv: list[str] | None = None) -> int:
             import imageio  # pyright: ignore[reportMissingImports]
 
             video_path = out / "eval_vla_episode0.mp4"
-            with imageio.get_writer(video_path, fps=30, codec="libx264", quality=8) as writer:
+            writer: Any = imageio.get_writer(video_path, fps=30, codec="libx264", quality=8)
+            with writer:
                 for frame in episode_frames:
                     writer.append_data(frame)
             print(f"      video: {video_path}", flush=True)

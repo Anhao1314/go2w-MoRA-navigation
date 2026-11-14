@@ -16,6 +16,7 @@ import argparse
 import json
 import pathlib
 import sys
+from typing import Any
 
 import numpy as np
 
@@ -50,7 +51,8 @@ def record(policy, seed: int, out_mp4: pathlib.Path, out_gif: pathlib.Path,
         if env.over:
             break
 
-    with imageio.get_writer(out_mp4, fps=fps, codec="libx264", quality=8) as writer:
+    writer: Any = imageio.get_writer(out_mp4, fps=fps, codec="libx264", quality=8)
+    with writer:
         for frame in frames:
             writer.append_data(frame)
     import PIL.Image
@@ -70,7 +72,7 @@ def record(policy, seed: int, out_mp4: pathlib.Path, out_gif: pathlib.Path,
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "usage").splitlines()[0])
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", type=pathlib.Path,
                         default=PROJECT_ROOT / "media" / "training")

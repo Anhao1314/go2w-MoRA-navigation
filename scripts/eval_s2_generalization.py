@@ -44,7 +44,7 @@ GEOMETRIES = {
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "usage").splitlines()[0])
     parser.add_argument("--seeds", type=int, default=20)
     parser.add_argument("--out", type=pathlib.Path,
                         default=PROJECT_ROOT / "logs" / "s4" / "s2_generalization")
